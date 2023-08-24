@@ -37,12 +37,7 @@
                 class="text-xl bg-[#2DD112] py-2 rounded-2xl font-semibold w-2/3 transition-all"
                 :class="!password ? 'opacity-60' : 'hover:scale-110'"
                 :disabled="!password"
-                @click.prevent="
-                    () => {
-                        $emit('passwordEntered', password);
-                        $emit('closeRoomPassword');
-                    }
-                "
+                @click.prevent="() => $emit('passwordEntered', password)"
             >
                 Criar
             </button>

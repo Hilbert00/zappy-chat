@@ -3,31 +3,64 @@
         class="w-full h-screen flex"
         tabindex="0"
         @keyup.esc="
-            () => {
+            async () => {
+                await leaveRoom();
+
+                roomData.id = '';
                 roomData.name = '';
                 roomData.tags = '';
-                roomData.online = null;
             }
         "
     >
         <RoomPassword
             v-if="lockedRoom"
+            @passwordEntered="
+                async (password) => {
+                    await tryPassword(password);
+                    lockedRoom = null;
+                }
+            "
             @closeRoomPassword="lockedRoom = null"
-            @passwordEntered="(password) => tryPassword(password)"
         />
-        <CreateRoom v-if="roomCreator" @closeRoomCreator="roomCreator = false" @roomAdded="getRooms()" />
+        <CreateRoom
+            v-if="roomCreator"
+            @closeRoomCreator="roomCreator = false"
+            @roomAdded="
+                async (id, name, tags) => {
+                    if (!(await enterRoom(id))) return;
+
+                    roomData.id = id;
+                    roomData.name = name;
+                    roomData.tags = tags;
+
+                    await getRooms();
+                    await getMessages();
+                }
+            "
+        />
         <SideBar
             class="fixed"
             :rooms="rooms"
+            @search="
+                (search) => {
+                    if (!search) return;
+
+                    rooms = rooms.filter((e) => e.name.includes(search));
+                }
+            "
             @openRoom="
-                (name, tags, password, online) => {
+                async (id, name, tags, password, online) => {
                     if (!password) {
+                        if (!(await enterRoom(id))) return;
+
+                        roomData.id = id;
                         roomData.name = name;
                         roomData.tags = tags;
-                        roomData.online = online === null ? 0 : online;
                     } else {
-                        getPassword({ name, password, tags, online: online === null ? 0 : online });
+                        getPassword({ id, name, password, tags, online: online === null ? 0 : online });
                     }
+
+                    await getMessages();
                 }
             "
             @openRoomCreator="roomCreator = true"
@@ -40,10 +73,6 @@
             <header class="p-4 h-24 border-b-2 border-neutral-950 bg-neutral-900 relative">
                 <h1 class="font-semibold text-3xl">{{ roomData.name }}</h1>
                 <span>{{ roomData.tags }}</span>
-                <div class="absolute top-4 right-4 font-semibold text-xl flex items-center gap-3">
-                    <span>{{ roomData.online }}</span>
-                    <div class="w-4 h-4 bg-[#2DD112] rounded-full"></div>
-                </div>
             </header>
             <div
                 ref="contentDiv"
@@ -51,14 +80,18 @@
                 :class="roomData.name && roomData.tags ? 'h-[calc(100vh-9.5rem)]' : 'h-[calc(100vh-3.5rem)]'"
             >
                 <div
-                    v-for="(message, index) in messages?.get(roomData.name)"
+                    v-for="(message, index) in messages"
                     :key="index"
                     class="relative w-3/5 rounded-2xl p-3 pb-8 bg-neutral-800"
-                    :class="message.username === userData.username ? 'ml-auto' : ''"
+                    :class="message.idUser === userData.id ? 'ml-auto' : ''"
                 >
-                    <p :style="{ color: message.usernameColor }">{{ message.username }}</p>
+                    <p :style="{ color: message.color }">{{ message.username }}</p>
                     <p class="w-full break-words">{{ message.content }}</p>
-                    <span class="absolute bottom-3 right-3 text-sm text-neutral-500">{{ message.date }}</span>
+                    <span class="absolute bottom-3 right-3 text-sm text-neutral-500">{{
+                        String(new Date(message.timestamp).getHours()).padStart(2, 0) +
+                        ":" +
+                        String(new Date(message.timestamp).getMinutes()).padStart(2, 0)
+                    }}</span>
                 </div>
             </div>
             <form class="h-14 p-3 bg-neutral-900 flex gap-5 w-[calc(100vw-24rem)] items-center">
@@ -107,19 +140,21 @@ const data = inject("$data");
 const router = useRouter();
 
 const userData = reactive({
+    id: "",
     username: "",
     color: "",
     currentMessage: "",
 });
 
 const roomData = reactive({
+    id: "",
     name: "",
     tags: "",
     online: "",
 });
 
-const rooms = ref(data.getRoomsArray());
-const messages = ref(new Map());
+const rooms = ref([]);
+const messages = ref([]);
 const contentDiv = ref(null);
 const roomCreator = ref(false);
 const lockedRoom = ref(null);
@@ -128,52 +163,70 @@ onUpdated(() => {
     contentDiv.value.scrollTop = contentDiv.value.scrollHeight;
 });
 
-onMounted(() => {
+onMounted(async () => {
     const user = data.getUser();
 
     if (user.username) {
-        userData.username = user.username;
+        userData.id = user.idUser;
         userData.color = user.color;
+        userData.username = user.username;
     } else {
         router.push({ path: "/" });
     }
 
-    getRooms();
+    setInterval(() => {
+        getRooms();
+        if (roomData.id) getMessages();
+    }, 5000);
+
+    await getRooms();
 });
 
-function getRooms() {
-    rooms.value = data.getRoomsArray();
+async function getRooms() {
+    rooms.value = await data.getRooms();
 }
 
-function sendMessage() {
-    const date = new Date();
+async function enterRoom(roomId) {
+    const response = await data.setRoom(roomId);
 
-    if (!messages.value.get(roomData.name)) {
-        messages.value.set(roomData.name, []);
+    if (!response) {
+        router.push({ path: "/" });
+        return false;
+    } else {
+        getMessages();
+        return true;
     }
+}
 
-    messages.value.get(roomData.name).push({
-        username: userData.username,
-        usernameColor: userData.color,
-        content: userData.currentMessage,
-        date: date.toLocaleString("pt-BR", { timeStyle: "full" }).substring(0, 5),
-    });
+async function leaveRoom() {
+    await data.leaveRoom(roomData.id);
+    await getRooms();
+}
+
+async function getMessages() {
+    messages.value = await data.getMessages();
+}
+
+async function sendMessage() {
+    await data.sendMessage(userData.currentMessage);
 
     userData.currentMessage = "";
+
+    await getMessages();
 }
 
 function getPassword(room) {
     lockedRoom.value = room;
 }
 
-function tryPassword(password) {
+async function tryPassword(password) {
     if (password === lockedRoom.value.password) {
+        if (!(await enterRoom(lockedRoom.value.id))) return;
+
+        roomData.id = lockedRoom.value.id;
         roomData.name = lockedRoom.value.name;
         roomData.tags = lockedRoom.value.tags;
-        roomData.online = lockedRoom.value.online === null ? 0 : lockedRoom.value.online;
-    } else {
-        lockedRoom.value = null;
-    }
+    } else lockedRoom.value = null;
 }
 </script>
 

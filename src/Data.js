@@ -1,39 +1,104 @@
 const userKey = "user";
+const apiUrl = process.env.VUE_APP_API_URL;
 
 if (!window.localStorage.getItem(userKey)) {
     window.localStorage.setItem(userKey, JSON.stringify({ username: null, color: null }));
 }
 
-const user = JSON.parse(window.localStorage.getItem(userKey));
-const rooms = {};
-
-function save() {
-    window.localStorage.setItem(userKey, JSON.stringify(user));
+function save(user) {
+    if (!user) window.localStorage.removeItem(userKey);
+    else window.localStorage.setItem(userKey, JSON.stringify(user));
 }
 
 export default {
-    setUser(username, color) {
-        user.username = username;
-        user.color = color;
+    getUser() {
+        return JSON.parse(window.localStorage.getItem(userKey));
+    },
+    async setUser(username) {
+        const request = await fetch(apiUrl + "/entrar", {
+            headers: { "Content-Type": "application/json" },
+            method: "POST",
+            body: JSON.stringify({ username }),
+        });
+
+        const data = await request.json();
+
+        save(data.resp);
+    },
+    async exitUser() {
+        const user = JSON.parse(window.localStorage.getItem(userKey));
+
+        if (user)
+            await fetch(apiUrl + "/sair", {
+                headers: { token: user.token, username: user.username },
+                method: "DELETE",
+            });
 
         save();
     },
-    getUser() {
-        return user;
-    },
-    getRooms() {
-        return rooms;
-    },
-    getRoomsArray() {
-        const responseArray = [];
+    async getRooms() {
+        const request = await fetch(apiUrl + "/salas");
 
-        Object.keys(rooms).forEach((key) => {
-            responseArray.push(rooms[key]);
+        const data = await request.json();
+
+        return data.resp;
+    },
+    async setRoom(idSala) {
+        const user = JSON.parse(window.localStorage.getItem(userKey));
+
+        const res = await fetch(apiUrl + `/salas/entrar?idSala=${idSala}`, {
+            headers: { token: user.token, username: user.username },
+            method: "PUT",
         });
 
-        return responseArray;
+        return res.ok;
     },
-    addRoom(name, tags, password) {
-        rooms[name] = { name, tags, online: 1, password };
+    async leaveRoom(idSala) {
+        const user = JSON.parse(window.localStorage.getItem(userKey));
+
+        await fetch(apiUrl + `/salas/sair`, {
+            headers: { token: user.token, username: user.username, idSala },
+            method: "PUT",
+        });
+    },
+    async addRoom(name, tags, password) {
+        const user = JSON.parse(window.localStorage.getItem(userKey));
+
+        const request = await fetch(apiUrl + "/salas/criar", {
+            headers: { "Content-Type": "application/json", token: user.token, username: user.username },
+            method: "POST",
+            body: JSON.stringify({ name, tags, password }),
+        });
+
+        const data = await request.json();
+
+        return data.resp;
+    },
+    async getMessages() {
+        const user = JSON.parse(window.localStorage.getItem(userKey));
+
+        const date = new Date();
+        date.setDate(date.getDate() - 1);
+
+        const timestamp = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, 0)}-${String(
+            date.getDate()
+        ).padStart(2, 0)}`;
+
+        const request = await fetch(apiUrl + `/mensagens?timestamp=${timestamp}`, {
+            headers: { "Content-Type": "application/json", token: user.token, username: user.username },
+        });
+
+        const data = await request.json();
+
+        return data.resp;
+    },
+    async sendMessage(msg) {
+        const user = JSON.parse(window.localStorage.getItem(userKey));
+
+        await fetch(apiUrl + "/mensagens/enviar", {
+            headers: { "Content-Type": "application/json", token: user.token, username: user.username },
+            method: "POST",
+            body: JSON.stringify({ msg }),
+        });
     },
 };

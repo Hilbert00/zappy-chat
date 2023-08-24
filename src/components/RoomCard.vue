@@ -1,5 +1,5 @@
 <template>
-    <div class="body rounded-2xl p-4 relative bg-neutral-800 hover:cursor-pointer">
+    <div class="body mb-8 w-80 rounded-2xl p-4 relative bg-neutral-800 hover:cursor-pointer">
         <h1 class="font-semibold text-2xl">{{ props.name }}</h1>
         <span class="text-sm">{{ props.tags }}</span>
         <div

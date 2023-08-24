@@ -86,9 +86,11 @@
                 "
                 :disabled="!roomData.name || !roomData.tags || (!roomData.isPublic && !roomData.password)"
                 @click.prevent="
-                    () => {
-                        addRoom();
-                        $emit('roomAdded');
+                    async () => {
+                        const res = await addRoom();
+
+                        $emit('roomAdded', res.insertedId, roomData.name, roomData.tags);
+                        clearForm();
                         $emit('closeRoomCreator');
                     }
                 "
@@ -111,9 +113,8 @@ const roomData = reactive({
     password: "",
 });
 
-function addRoom() {
-    data.addRoom(roomData.name, roomData.tags, roomData.password);
-    clearForm();
+async function addRoom() {
+    return await data.addRoom(roomData.name, roomData.tags, roomData.password);
 }
 
 function clearForm() {

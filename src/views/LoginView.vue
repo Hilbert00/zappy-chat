@@ -40,22 +40,13 @@ onMounted(() => {
     const user = data.getUser();
 
     if (user.username) {
-        username.value = user.username;
+        data.exitUser();
     }
 });
 
-function login(username) {
-    data.setUser(username, randomColor());
+async function login(username) {
+    await data.setUser(username);
+
     router.push({ path: "/rooms" });
-}
-
-function randomColor() {
-    const values = "0123456789ABCDEF";
-
-    let color = "#";
-
-    for (let i = 0; i < 6; i++) color += values[Math.floor(Math.random() * 16)];
-
-    return color;
 }
 </script>
